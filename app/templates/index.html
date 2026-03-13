@@ -5,7 +5,7 @@
   <title>Dir Cleaner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
-  <!-- HTMX REAL (CDN) -->
+  <!-- HTMX real (CDN) -->
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 
   <style>
@@ -28,38 +28,35 @@
 
 <body>
   <h1>Dir Cleaner</h1>
-  <p class="muted">Scanează directoarele, filtrează fișierele vechi și poți șterge sau muta în carantină.</p>
+  <p class="muted">Scanează directoarele, marchează cele mici/vechi/goale și execută acțiuni (carantină/ștergere).</p>
 
-  <!-- FORMULAR FUNCȚIONAL CU FALLBACK -->
+  <!-- FORMULAR: HTMX face XHR, DAR NU mai face swap (hx-swap='none'); noi randăm manual -->
   <form id="scan-form"
-        action="/api/scan"               <!-- fallback -->
+        action="/api/scan"
         method="get"
-        hx-get="/api/scan"               <!-- HTMX -->
+        hx-get="/api/scan"
         hx-target="#results"
         hx-trigger="submit"
-        hx-indicator="#loading">
+        hx-indicator="#loading"
+        hx-swap="none">
 
     <div class="grid">
       <div>
         <label>Path de bază</label>
         <input type="text" name="path" value="{{ base_path }}" style="width:100%"/>
       </div>
-
       <div>
         <label>Prag mărime (MB &lt;)</label>
         <input type="number" name="size_threshold_mb" value="{{ defaults.size_threshold_mb }}" min="0" style="width:100%"/>
       </div>
-
       <div>
         <label>Zile neutilizate (&gt;=)</label>
         <input type="number" name="unused_days" value="{{ defaults.unused_days }}" min="0" style="width:100%"/>
       </div>
-
       <div>
         <label>Adâncime scanare</label>
         <input type="number" name="depth" value="{{ defaults.depth }}" min="1" max="5" style="width:100%"/>
       </div>
-
       <div>
         <label>Exclude (virgulă)</label>
         <input type="text" name="excludes" value="{{ defaults.excludes }}" style="width:100%"/>
@@ -74,34 +71,45 @@
 
   <div id="results" style="margin-top:20px"></div>
 
-  <!-- JS pentru randare HTML a rezultatului -->
   <script>
-    document.body.addEventListener('htmx:afterOnLoad', function(evt) {
-      const raw = evt.detail.xhr.responseText;
-      let data = null;
+    // Arată/ascunde indicatorul
+    document.body.addEventListener('htmx:beforeRequest', function() {
+      const indicator = document.querySelector('#loading');
+      if (indicator) indicator.style.display = 'inline';
+    });
+    document.body.addEventListener('htmx:afterRequest', function() {
+      const indicator = document.querySelector('#loading');
+      if (indicator) indicator.style.display = 'none';
+    });
 
+    // Procesăm răspunsul JSON și generăm tabelul
+    document.body.addEventListener('htmx:afterOnLoad', function (evt) {
+      // Facem randare DOAR pentru requestul formularului nostru
+      const src = evt.detail.elt;
+      if (!src || src.id !== 'scan-form') return;
+
+      const raw = evt.detail.xhr.responseText || '';
       try {
-        data = JSON.parse(raw);
+        const data = JSON.parse(raw);
+        renderTable(data);
       } catch (e) {
-        // fallback: afișează direct ce a venit
-        document.querySelector('#results').innerHTML = "<pre>"+raw+"</pre>";
-        return;
+        // fallback: afișează textul brut ca să putem depana
+        document.querySelector('#results').innerHTML = '<pre>'+raw+'</pre>';
       }
-
-      renderTable(data);
     });
 
     function renderTable(data) {
-      const items = data.items || [];
+      const items = data && Array.isArray(data.items) ? data.items : [];
+
       if (items.length === 0) {
-        document.querySelector('#results').innerHTML = "<p><b>Nimic de afișat.</b></p>";
+        document.querySelector('#results').innerHTML = "<p><b>Nimic de afișat.</b> Verifică path-ul și conținutul din /data.</p>";
         return;
       }
 
       let html = "";
       html += '<form id="delete-form">';
-      html += '<input type="hidden" name="base_path" value="'+document.querySelector("input[name=path]").value+'">';
-      html += '<input type="hidden" id="action" name="action" value="quarantine">';
+      html += '<input type="hidden" name="base_path" value="' + (document.querySelector('input[name=path]').value) + '"/>';
+      html += '<input type="hidden" id="action" name="action" value="quarantine"/>';
 
       html += '<table><thead><tr>' +
               '<th></th><th>Path</th><th>Mărime</th><th>Fișiere</th><th>Subfoldere</th><th>Gol</th><th>Vechi</th>' +
@@ -113,7 +121,7 @@
                     (it.old_files_count > 0 ? "old" : "");
 
         html += `<tr class="${cls}">
-                   <td><input type="checkbox" name="targets" value="${it.rel_path}"></td>
+                   <td><input type="checkbox" name="targets" value="${it.rel_path}"/></td>
                    <td>${it.rel_path}</td>
                    <td>${it.size_h}</td>
                    <td>${it.file_count}</td>
@@ -123,36 +131,32 @@
                  </tr>`;
       }
 
-      html += "</tbody></table>";
+      html += '</tbody></table>';
 
       html += '<div style="margin-top:12px">' +
               '<button type="button" class="btn warn" onclick="submitDelete(\'quarantine\')">Mută în carantină</button> ' +
               '<button type="button" class="btn danger" onclick="submitDelete(\'delete\')">Șterge definitiv</button>' +
               '</div>';
 
-      html += "</form>";
+      html += '</form>';
 
-      document.querySelector("#results").innerHTML = html;
+      document.querySelector('#results').innerHTML = html;
     }
 
     function submitDelete(actionType) {
-      const form = document.getElementById("delete-form");
-      const act = document.getElementById("action");
+      const form = document.getElementById('delete-form');
+      const actionInput = document.getElementById('action');
+      actionInput.value = actionType;
 
-      act.value = actionType;
+      if (actionType === 'delete' && !confirm('Ești sigur? Această operație este definitivă!')) return;
 
-      if (actionType === "delete" && !confirm("Ești sigur? Această operație este definitivă.")) {
-        return;
-      }
-
-      fetch("/api/delete", { method: "POST", body: new FormData(form) })
+      fetch('/api/delete', { method: 'POST', body: new FormData(form) })
         .then(r => r.json())
         .then(data => {
-          alert("Rezultat:\n" + JSON.stringify(data, null, 2));
+          alert('Rezultat:\n' + JSON.stringify(data, null, 2));
         })
-        .catch(err => alert("Eroare: " + err));
+        .catch(e => alert('Eroare: ' + e));
     }
   </script>
-
 </body>
 </html>
