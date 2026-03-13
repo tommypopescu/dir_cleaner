@@ -5,13 +5,13 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   docker:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write   # required to push to GHCR
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,8 +27,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker/Dockerfile
+          file: ./Dockerfile          # <-- important: în rădăcină
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/muserrenamer:latest
-            ghcr.io/${{ github.repository_owner }}/muserrenamer:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/dir-cleaner:latest
+            ghcr.io/${{ github.repository_owner }}/dir-cleaner:${{ github.sha }}
