@@ -128,12 +128,12 @@ def delete_or_quarantine(base_path: Path, targets: List[str], quarantine_path: O
         except Exception as e:
             errors.append({"path": str(p), "error": str(e)})
             log_lines.append(f"{ts};ERROR;{p};{e}")
-    if audit_log:
+if audit_log:
         try:
             audit_log.parent.mkdir(parents=True, exist_ok=True)
-            with open(audit_log, 'a', encoding='utf-8') as f:
+            with open(audit_log, "a", encoding="utf-8") as f:
                 for line in log_lines:
-                    f.write(line + "\n")
+                    f.write(line + "\n")  # <— important: ghilimele duble + \n
         except Exception:
             pass
     return {"moved": moved, "deleted": deleted, "skipped": skipped, "errors": errors}
