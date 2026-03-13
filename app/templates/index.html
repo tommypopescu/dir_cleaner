@@ -9,154 +9,349 @@
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 
   <style>
-    body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 15px; }
-    th, td { border-bottom: 1px solid #ddd; padding: 8px; font-size: 14px; }
-    th { background: #f5f5f5; position: sticky; top: 0; }
+    :root {
+      --bg: #ffffff;
+      --text: #0f172a;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --head: #f5f5f5;
+      --primary: #2563eb;
+      --warn: #f59e0b;
+      --danger: #dc2626;
+      color-scheme: light;
+    }
+    body.dark {
+      --bg: #0b1220;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --border: #334155;
+      --head: #111827;
+      --primary: #3b82f6;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      color-scheme: dark;
+    }
+    body { background: var(--bg); color: var(--text); font-family: system-ui, Arial, sans-serif; margin: 20px; }
+    h1 { margin: 0 0 6px 0; }
+    .muted { color: var(--muted); font-size: 12px; }
+
+    .row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .grid { display:grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 12px; }
+    .grid label { font-size: 12px; color: var(--muted); }
+    input[type=text], input[type=number], select {
+      width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px;
+      background: var(--bg); color: var(--text);
+    }
+
+    .btn { padding: 6px 12px; border: 1px solid #ccc; border-radius: 6px; cursor: pointer; background:#fff; }
+    body.dark .btn { background:#0f172a; border-color:#334155; color:#e5e7eb; }
+    .btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .btn.warn    { background: var(--warn); color:#fff; border-color: var(--warn); }
+    .btn.danger  { background: var(--danger); color:#fff; border-color: var(--danger); }
+    .btn.ghost   { background:transparent; color:inherit; border-color: var(--border); }
+
+    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+    th, td { border-bottom: 1px solid var(--border); padding: 8px; font-size: 14px; }
+    th { background: var(--head); position: sticky; top: 72px; z-index: 1; user-select: none; }
+    tr:hover td { background: rgba(148,163,184,.10); }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--border); color:inherit; }
     .small { color: #b45309; font-weight: 600; }
     .empty { color: #9ca3af; }
-    .old { color: #2563eb; }
-    .btn { padding: 6px 12px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; }
-    .btn.primary { background: #2563eb; color: white; border-color: #2563eb; }
-    .btn.warn    { background: #f59e0b; color: white; border-color: #f59e0b; }
-    .btn.danger  { background: #dc2626; color: white; border-color: #dc2626; }
-    .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
-    .grid label { font-size: 12px; color: #374151; }
-    .muted { color: #6b7280; font-size: 12px; }
+    .old { color: #60a5fa; }
+
+    .topbar { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+    .theme-toggle { margin-left:auto; }
+    .bar { position: sticky; top: 44px; background: var(--bg); padding: 8px 0; border-bottom: 1px solid var(--border); z-index: 2; }
+    .bar.bottom { position: sticky; bottom: 0; top: auto; border-top: 1px solid var(--border); border-bottom: none; background: var(--bg); padding: 10px 0; }
+    .bar .actions { display:flex; gap:8px; align-items:center; flex-wrap: wrap; }
+    .bar .spacer { flex:1; }
+
+    .sortable { cursor: pointer; }
+    .sortable .arrow { margin-left: 6px; opacity: 0.75; font-size: 12px; }
+    .nowrap { white-space: nowrap; }
   </style>
 </head>
 
 <body>
-  <h1>Dir Cleaner</h1>
-  <p class="muted">Scanează directoarele, marchează cele mici/vechi/goale și execută acțiuni (carantină/ștergere).</p>
+  <div class="topbar">
+    <h1>Dir Cleaner</h1>
+    <!-- Toggle dark/light -->
+    <button id="themeBtn" class="btn ghost theme-toggle" title="Comută tema">🌙</button>
+  </div>
+  <p class="muted">Scanează directoarele, sortează după mărime, marchează cele mici/vechi/goale și mută sau șterge în siguranță.</p>
 
-  <!-- FORMULAR: HTMX face XHR, DAR NU mai face swap (hx-swap='none'); noi randăm manual -->
+  <!-- FORMULAR: HTMX XHR, fără swap (randerizăm manual); fallback clasic spre /api/scan -->
   <form id="scan-form"
         action="/api/scan"
         method="get"
         hx-get="/api/scan"
         hx-target="#results"
         hx-trigger="submit"
-        hx-indicator="#loading"
-        hx-swap="none">
+        hx-swap="none"
+        hx-indicator="#loading">
 
-    <div class="grid">
-      <div>
-        <label>Path de bază</label>
-        <input type="text" name="path" value="{{ base_path }}" style="width:100%"/>
+    <!-- Linie cu selectorul de „Sursă” și buton Scan -->
+    <div class="row">
+      <!-- Select sursă: se populează din PATH_CHOICES -->
+      <div style="min-width:260px; flex:1 1 260px">
+        <label class="muted">Sursă</label>
+        <select id="path-select">
+          {% if path_choices %}
+            {% for p in path_choices %}
+              <option value="{{ p }}" {% if p == base_path %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+          {% else %}
+            <option value="{{ base_path }}" selected>{{ base_path }}</option>
+          {% endif %}
+        </select>
       </div>
+
+      <!-- Câmpul real „path” trimis către API -->
+      <div style="min-width:260px; flex:2 1 400px">
+        <label class="muted">Path de bază</label>
+        <input id="path-input" type="text" name="path" value="{{ base_path }}" />
+      </div>
+
+      <div>
+        <label class="muted">&nbsp;</label>
+        <button class="btn primary" type="submit" style="display:block;">Scanează</button>
+      </div>
+
+      <span id="loading" class="muted" style="display:none">Se încarcă...</span>
+    </div>
+
+    <!-- Filtre avansate -->
+    <div class="grid" style="margin-top:10px">
       <div>
         <label>Prag mărime (MB &lt;)</label>
-        <input type="number" name="size_threshold_mb" value="{{ defaults.size_threshold_mb }}" min="0" style="width:100%"/>
+        <input type="number" name="size_threshold_mb" value="{{ defaults.size_threshold_mb }}" min="0"/>
       </div>
       <div>
         <label>Zile neutilizate (&gt;=)</label>
-        <input type="number" name="unused_days" value="{{ defaults.unused_days }}" min="0" style="width:100%"/>
+        <input type="number" name="unused_days" value="{{ defaults.unused_days }}" min="0"/>
       </div>
       <div>
         <label>Adâncime scanare</label>
-        <input type="number" name="depth" value="{{ defaults.depth }}" min="1" max="5" style="width:100%"/>
+        <input type="number" name="depth" value="{{ defaults.depth }}" min="1" max="5"/>
       </div>
       <div>
         <label>Exclude (virgulă)</label>
-        <input type="text" name="excludes" value="{{ defaults.excludes }}" style="width:100%"/>
+        <input type="text" name="excludes" value="{{ defaults.excludes }}"/>
       </div>
-    </div>
-
-    <div style="margin-top:12px">
-      <button class="btn primary" type="submit">Scanează</button>
-      <span id="loading" class="muted" style="display:none">Se încarcă...</span>
+      <div>
+        <label class="muted">&nbsp;</label>
+        <span class="badge">Tema: <span id="themeLabel">light</span></span>
+      </div>
     </div>
   </form>
 
-  <div id="results" style="margin-top:20px"></div>
+  <!-- Bara de acțiuni SUS -->
+  <div id="top-bar" class="bar" style="display:none"></div>
+
+  <!-- Rezultate tabel -->
+  <div id="results" style="margin-top:6px"></div>
+
+  <!-- Bara de acțiuni JOS -->
+  <div id="bottom-bar" class="bar bottom" style="display:none"></div>
 
   <script>
-    // Arată/ascunde indicatorul
-    document.body.addEventListener('htmx:beforeRequest', function() {
-      const indicator = document.querySelector('#loading');
-      if (indicator) indicator.style.display = 'inline';
-    });
-    document.body.addEventListener('htmx:afterRequest', function() {
-      const indicator = document.querySelector('#loading');
-      if (indicator) indicator.style.display = 'none';
+    // ---------- TEMA (dark/light) ----------
+    (function initTheme(){
+      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const saved = localStorage.getItem('dircleaner.theme'); // 'dark' | 'light' | null
+      const useDark = saved ? (saved === 'dark') : prefersDark;
+      document.body.classList.toggle('dark', useDark);
+      document.getElementById('themeBtn').textContent = useDark ? '☀️' : '🌙';
+      document.getElementById('themeLabel').textContent = useDark ? 'dark' : 'light';
+    })();
+
+    document.getElementById('themeBtn').onclick = () => {
+      const nowDark = !document.body.classList.contains('dark');
+      document.body.classList.toggle('dark', nowDark);
+      localStorage.setItem('dircleaner.theme', nowDark ? 'dark' : 'light');
+      document.getElementById('themeBtn').textContent = nowDark ? '☀️' : '🌙';
+      document.getElementById('themeLabel').textContent = nowDark ? 'dark' : 'light';
+    };
+
+    // ---------- SELECT SURSĂ ----------
+    const pathSel = document.getElementById('path-select');
+    const pathInput = document.getElementById('path-input');
+
+    // Când schimb „Sursa”, copiez în input și pornesc scan automat
+    pathSel.addEventListener('change', () => {
+      pathInput.value = pathSel.value;
+      triggerScan(); // scan automat
     });
 
-    // Procesăm răspunsul JSON și generăm tabelul
+    // ---------- STATE & UI ----------
+    let currentItems = [];
+    let sortState = { key: 'size_bytes', dir: 'desc' }; // implicit: mărime desc
+    let selectedPaths = new Set();
+
+    document.body.addEventListener('htmx:beforeRequest', () => {
+      const el = document.querySelector('#loading'); if (el) el.style.display = 'inline';
+    });
+    document.body.addEventListener('htmx:afterRequest', () => {
+      const el = document.querySelector('#loading'); if (el) el.style.display = 'none';
+    });
+
     document.body.addEventListener('htmx:afterOnLoad', function (evt) {
-      // Facem randare DOAR pentru requestul formularului nostru
-      const src = evt.detail.elt;
-      if (!src || src.id !== 'scan-form') return;
-
+      if (!evt.detail || evt.detail.elt?.id !== 'scan-form') return;
       const raw = evt.detail.xhr.responseText || '';
       try {
         const data = JSON.parse(raw);
-        renderTable(data);
+        currentItems = Array.isArray(data.items) ? data.items : [];
+        drawTable();
+        updateActionBars();
       } catch (e) {
-        // fallback: afișează textul brut ca să putem depana
         document.querySelector('#results').innerHTML = '<pre>'+raw+'</pre>';
       }
     });
 
-    function renderTable(data) {
-      const items = data && Array.isArray(data.items) ? data.items : [];
+    function actionBarHtml() {
+      const count = selectedPaths.size;
+      return `
+        <div class="actions">
+          <span class="badge">Selectate: ${count}</span>
+          <button type="button" class="btn ghost" onclick="selectAll(true)">Bifează tot</button>
+          <button type="button" class="btn ghost" onclick="selectAll(false)">Debifează tot</button>
+          <div class="spacer"></div>
+          <button type="button" class="btn warn"   onclick="submitDelete('quarantine')">Mută în carantină</button>
+          <button type="button" class="btn danger" onclick="submitDelete('delete')">Șterge definitiv</button>
+        </div>
+      `;
+    }
 
-      if (items.length === 0) {
-        document.querySelector('#results').innerHTML = "<p><b>Nimic de afișat.</b> Verifică path-ul și conținutul din /data.</p>";
-        return;
+    function updateActionBars() {
+      const top = document.getElementById('top-bar');
+      const bot = document.getElementById('bottom-bar');
+      const visible = currentItems.length > 0;
+      top.style.display = visible ? 'block' : 'none';
+      bot.style.display = visible ? 'block' : 'none';
+      if (visible) {
+        top.innerHTML = actionBarHtml();
+        bot.innerHTML = actionBarHtml();
       }
+    }
 
-      let html = "";
+    function drawTable() {
+      const items = [...currentItems];
+      const { key, dir } = sortState;
+      items.sort((a,b) => {
+        let va = a[key], vb = b[key];
+        if (typeof va === 'string' && typeof vb === 'string') {
+          return dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+        }
+        va = (va == null ? -Infinity : va);
+        vb = (vb == null ? -Infinity : vb);
+        return dir === 'asc' ? (va - vb) : (vb - va);
+      });
+
+      let html = '';
       html += '<form id="delete-form">';
-      html += '<input type="hidden" name="base_path" value="' + (document.querySelector('input[name=path]').value) + '"/>';
+      html += '<input type="hidden" name="base_path" value="'+ (document.querySelector('input[name=path]').value) + '"/>';
       html += '<input type="hidden" id="action" name="action" value="quarantine"/>';
 
-      html += '<table><thead><tr>' +
-              '<th></th><th>Path</th><th>Mărime</th><th>Fișiere</th><th>Subfoldere</th><th>Gol</th><th>Vechi</th>' +
-              '</tr></thead><tbody>';
+      html += '<table><thead><tr>';
+      html += headerCell('select', '');
+      html += headerCell('rel_path', 'Path');
+      html += headerCell('size_bytes', 'Mărime', true);
+      html += headerCell('file_count', 'Fișiere', true);
+      html += headerCell('dir_count', 'Subfoldere', true);
+      html += headerCell('empty', 'Gol', true);
+      html += headerCell('old_files_count', 'Vechi', true);
+      html += '</tr></thead><tbody>';
 
       for (const it of items) {
-        const cls = (it.empty ? "empty " : "") +
-                    (it.flag_small ? "small " : "") +
-                    (it.old_files_count > 0 ? "old" : "");
-
+        const cls = (it.empty ? 'empty ' : '') + (it.flag_small ? 'small ' : '') + (it.old_files_count > 0 ? 'old' : '');
+        const checked = selectedPaths.has(it.rel_path) ? 'checked' : '';
         html += `<tr class="${cls}">
-                   <td><input type="checkbox" name="targets" value="${it.rel_path}"/></td>
-                   <td>${it.rel_path}</td>
-                   <td>${it.size_h}</td>
-                   <td>${it.file_count}</td>
-                   <td>${it.dir_count}</td>
-                   <td>${it.empty ? 'Da' : 'Nu'}</td>
-                   <td>${it.old_files_count}</td>
-                 </tr>`;
+          <td class="nowrap"><input type="checkbox" class="row-check" data-path="${it.rel_path}" ${checked}></td>
+          <td>${it.rel_path}</td>
+          <td class="nowrap">${it.size_h}</td>
+          <td>${it.file_count}</td>
+          <td>${it.dir_count}</td>
+          <td>${it.empty ? 'Da' : 'Nu'}</td>
+          <td>${it.old_files_count}</td>
+        </tr>`;
       }
 
       html += '</tbody></table>';
-
-      html += '<div style="margin-top:12px">' +
-              '<button type="button" class="btn warn" onclick="submitDelete(\'quarantine\')">Mută în carantină</button> ' +
-              '<button type="button" class="btn danger" onclick="submitDelete(\'delete\')">Șterge definitiv</button>' +
-              '</div>';
-
       html += '</form>';
 
       document.querySelector('#results').innerHTML = html;
+      wireRowCheckboxes();
+      wireSortableHeaders();
+      updateActionBars();
     }
 
-    function submitDelete(actionType) {
+    function headerCell(key, label, sortable=false) {
+      if (!sortable) return `<th>${label}</th>`;
+      const active = (sortState.key === key);
+      const arrow = active ? (sortState.dir === 'asc' ? '▲' : '▼') : '↕';
+      return `<th class="sortable" data-key="${key}">${label}<span class="arrow">${arrow}</span></th>`;
+    }
+    function wireSortableHeaders() {
+      document.querySelectorAll('th.sortable').forEach(th => {
+        th.onclick = () => {
+          const key = th.getAttribute('data-key');
+          if (sortState.key === key) {
+            sortState.dir = (sortState.dir === 'asc') ? 'desc' : 'asc';
+          } else {
+            sortState.key = key;
+            sortState.dir = (key === 'rel_path') ? 'asc' : 'desc';
+          }
+          drawTable();
+        };
+      });
+    }
+
+    function wireRowCheckboxes() {
+      document.querySelectorAll('.row-check').forEach(cb => {
+        cb.onchange = () => {
+          const p = cb.getAttribute('data-path');
+          if (cb.checked) selectedPaths.add(p); else selectedPaths.delete(p);
+          updateActionBars();
+        };
+      });
+    }
+    window.selectAll = function(on) {
+      document.querySelectorAll('.row-check').forEach(cb => {
+        cb.checked = on;
+        const p = cb.getAttribute('data-path');
+        if (on) selectedPaths.add(p); else selectedPaths.delete(p);
+      });
+      updateActionBars();
+    };
+
+    window.submitDelete = function(actionType) {
       const form = document.getElementById('delete-form');
       const actionInput = document.getElementById('action');
       actionInput.value = actionType;
 
-      if (actionType === 'delete' && !confirm('Ești sigur? Această operație este definitivă!')) return;
+      if (actionType === 'delete' && !confirm('Ești sigur? Ștergerea este definitivă!')) return;
 
       fetch('/api/delete', { method: 'POST', body: new FormData(form) })
         .then(r => r.json())
         .then(data => {
-          alert('Rezultat:\n' + JSON.stringify(data, null, 2));
+          const moved = (data.moved || []).length;
+          const deleted = (data.deleted || []).length;
+          const errors = (data.errors || []).length;
+          alert(`Mutate: ${moved}\nȘterse: ${deleted}\nErori: ${errors}`);
+          selectedPaths.clear();
+          triggerScan();  // rescan automat
         })
         .catch(e => alert('Eroare: ' + e));
+    };
+
+    function triggerScan() {
+      const f = document.getElementById('scan-form');
+      if (!f) return;
+      htmx.trigger(f, 'submit');
     }
+
+    // Scan inițial (opțional): decomentează dacă vrei auto-scan la deschiderea paginii
+    // window.addEventListener('load', triggerScan);
   </script>
 </body>
 </html>

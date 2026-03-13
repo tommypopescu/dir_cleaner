@@ -12,6 +12,7 @@ app = FastAPI(title="Dir Cleaner", version="1.0.0")
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
+# ... (importuri și config existente)
 BASE_PATH = Path(os.getenv("BASE_PATH", "/data"))
 QUARANTINE_PATH = Path(os.getenv("QUARANTINE_PATH", "/quarantine")) if os.getenv("QUARANTINE_PATH") else None
 EXCLUDES = [s.strip() for s in os.getenv("EXCLUDES", "").split(",") if s.strip()]
@@ -19,6 +20,9 @@ DEFAULT_SIZE_THRESHOLD_MB = int(os.getenv("SIZE_THRESHOLD_MB", "50"))
 DEFAULT_UNUSED_DAYS = int(os.getenv("UNUSED_DAYS", "90"))
 DEFAULT_DEPTH = int(os.getenv("SCAN_DEPTH", "1"))
 AUDIT_LOG = Path(os.getenv("AUDIT_LOG", "/var/log/dir-cleaner/audit.log"))
+
+# ➕ NOU: liste de surse (virgulă-separate). Exemplu: /data,/mnt/media,/srv/share
+PATH_CHOICES = [s.strip() for s in os.getenv("PATH_CHOICES", str(BASE_PATH)).split(",") if s.strip()]
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, auth=Depends(basic_auth)):
