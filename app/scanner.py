@@ -133,8 +133,7 @@ def delete_or_quarantine(base_path: Path, targets: List[str], quarantine_path: O
             audit_log.parent.mkdir(parents=True, exist_ok=True)
             with open(audit_log, 'a', encoding='utf-8') as f:
                 for line in log_lines:
-                    f.write(line + '
-')
+                    f.write(line + "\n")
         except Exception:
             pass
     return {"moved": moved, "deleted": deleted, "skipped": skipped, "errors": errors}
