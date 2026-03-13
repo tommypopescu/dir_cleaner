@@ -1,4 +1,4 @@
-# Dir Cleaner (FastAPI)
+# Dir Cleaner (FastAPI).
 
 Aplicație web containerizată pentru scanarea și curățarea directoarelor mici/goale sau cu fișiere vechi. Include UI simplu (HTMX), container Docker și pipeline-uri pentru deploy **fără SSH**:
 - **Azure DevOps** (`azure-pipelines.yml`) → build în ACR + deploy în **Azure Container Apps** (ACA)
