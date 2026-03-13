@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8"/>
+  <title>Dir Cleaner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <script src="/static/htmx.min.js"></script>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border-bottom: 1px solid #ddd; padding: 8px; }
+    th { background: #f5f5f5; position: sticky; top: 0; }
+    .small { color: #b45309; font-weight: 600; }
+    .empty { color: #9ca3af; }
+    .old { color: #2563eb; }
+    .danger { color: #dc2626; }
+    .btn { padding: 6px 12px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; }
+    .btn.primary { background: #2563eb; color: white; border-color: #2563eb; }
+    .btn.warn { background: #f59e0b; color: white; border-color: #f59e0b; }
+    .btn.danger { background: #dc2626; color: white; border-color: #dc2626; }
+    .grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 12px; }
+    .grid label { font-size: 12px; color: #374151; }
+    .muted { color: #6b7280; font-size: 12px; }
+    pre { background:#f8fafc; padding:10px; border:1px solid #e5e7eb; border-radius:6px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <h1>Dir Cleaner</h1>
+  <p class="muted">Scanează un director și gestionează directoarele neutilizate / mici / goale. Recomandat: carantină.</p>
+
+  <form id="scan-form" hx-get="/api/scan" hx-target="#results" hx-trigger="submit" hx-indicator="#loading">
+    <div class="grid">
+      <div>
+        <label>Path de bază</label>
+        <input type="text" name="path" value="{{ base_path }}" style="width:100%"/>
+      </div>
+      <div>
+        <label>Prag mărime (MB &lt;)</label>
+        <input type="number" name="size_threshold_mb" value="{{ defaults.size_threshold_mb }}" min="0" style="width:100%"/>
+      </div>
+      <div>
+        <label>Zile neutilizate (&gt;=)</label>
+        <input type="number" name="unused_days" value="{{ defaults.unused_days }}" min="0" style="width:100%"/>
+      </div>
+      <div>
+        <label>Adâncime scanare</label>
+        <input type="number" name="depth" value="{{ defaults.depth }}" min="1" max="5" style="width:100%"/>
+      </div>
+      <div>
+        <label>Exclude (virgulă)</label>
+        <input type="text" name="excludes" value="{{ defaults.excludes }}" style="width:100%"/>
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <button type="submit" class="btn primary">Scanează</button>
+      <span id="loading" class="muted" style="display:none">Se încarcă...</span>
+    </div>
+  </form>
+
+  <div id="results" style="margin-top:20px"></div>
+
+  <script>
+    document.body.addEventListener('htmx:beforeOnLoad', function(evt) {
+      var indicator = document.querySelector('#loading');
+      if (indicator) indicator.style.display = 'inline';
+    });
+    document.body.addEventListener('htmx:afterOnLoad', function(evt) {
+      var indicator = document.querySelector('#loading');
+      if (indicator) indicator.style.display = 'none';
+      const res = evt.detail.xhr.responseText;
+      try {
+        const data = JSON.parse(res);
+        renderTable(data);
+      } catch (e) {
+        document.querySelector('#results').innerHTML = '<pre>'+res+'</pre>';
+      }
+    });
+
+    function renderTable(data){
+      const items = data.items || [];
+      let html = '';
+      html += '<form id="delete-form">';
+      html += '<input type="hidden" name="base_path" value="'+(document.querySelector('input[name=path]').value)+'" />';
+      html += '<input type="hidden" id="action" name="action" value="quarantine" />';
+      html += '<table><thead><tr><th></th><th>Path</th><th>Mărime</th><th>Fișiere</th><th>Subdir-uri</th><th>Gol</th><th>Fișiere vechi</th></tr></thead><tbody>';
+      for(const it of items){
+        const cls = (it.empty? 'empty ': '') + (it.flag_small? 'small ': '') + (it.old_files_count>0? ' old': '');
+        html += `<tr class="${cls}">`+
+                `<td><input type="checkbox" name="targets" value="${it.rel_path}"/></td>`+
+                `<td>${it.rel_path}</td>`+
+                `<td>${it.size_h}</td>`+
+                `<td>${it.file_count}</td>`+
+                `<td>${it.dir_count}</td>`+
+                `<td>${it.empty? 'Da':'Nu'}</td>`+
+                `<td>${it.old_files_count}</td>`+
+                `</tr>`;
+      }
+      html += '</tbody></table>';
+      html += '<div style="margin-top:12px">'+
+              '<button type="button" class="btn warn" onclick="submitDelete('quarantine')">Mută în carantină</button> '+
+              '<button type="button" class="btn danger" onclick="submitDelete('delete')">Șterge definitiv</button>'+
+              '</div>';
+      html += '</form>';
+      document.querySelector('#results').innerHTML = html;
+    }
+
+    function submitDelete(actionType) {
+      const form = document.getElementById('delete-form');
+      const actionInput = document.getElementById('action');
+      actionInput.value = actionType;
+      if (actionType === 'delete' && !confirm('Ești sigur? Ștergerea este definitivă!')) return;
+      fetch('/api/delete', { method: 'POST', body: new FormData(form) })
+        .then(r => r.json())
+        .then(data => { alert('Rezultat:
+' + JSON.stringify(data, null, 2)); })
+        .catch(e => alert('Eroare: ' + e));
+    }
+  </script>
+</body>
+</html>
