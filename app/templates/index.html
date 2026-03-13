@@ -5,6 +5,7 @@
   <title>Dir Cleaner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
+  <!-- HTMX real (CDN) -->
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 
   <style>
@@ -30,6 +31,7 @@
       --danger: #ef4444;
       color-scheme: dark;
     }
+
     body { background: var(--bg); color: var(--text); font-family: system-ui, Arial, sans-serif; margin: 20px; }
     h1 { margin: 0 0 6px 0; }
     .muted { color: var(--muted); font-size: 12px; }
@@ -37,6 +39,7 @@
     .row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
     .grid { display:grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 12px; }
     .grid label { font-size: 12px; color: var(--muted); }
+
     input[type=text], input[type=number], select {
       width:100%; padding:6px 8px; border:1px solid var(--border); border-radius:6px;
       background: var(--bg); color: var(--text);
@@ -52,6 +55,7 @@
     th, td { border-bottom: 1px solid var(--border); padding: 8px; font-size: 14px; }
     th { background: var(--head); position: sticky; top: 72px; z-index: 1; user-select: none; }
     tr:hover td { background: rgba(148,163,184,.10); }
+
     .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--border); color:inherit; }
     .small { color: #b45309; font-weight: 600; }
     .empty { color: #9ca3af; }
@@ -59,6 +63,7 @@
 
     .topbar { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
     .theme-toggle { margin-left:auto; }
+
     .bar { position: sticky; top: 44px; background: var(--bg); padding: 8px 0; border-bottom: 1px solid var(--border); z-index: 2; }
     .bar.bottom { position: sticky; bottom: 0; top: auto; border-top: 1px solid var(--border); border-bottom: none; background: var(--bg); padding: 10px 0; }
     .bar .actions { display:flex; gap:8px; align-items:center; flex-wrap: wrap; }
@@ -75,19 +80,19 @@
     <h1>Dir Cleaner</h1>
     <button id="themeBtn" class="btn ghost theme-toggle" title="Comută tema">🌙</button>
   </div>
+
   <p class="muted">Scanează directoarele, sortează după mărime, marchează cele mici/vechi/goale și mută sau șterge în siguranță.</p>
 
-  <!-- FORMULAR: HTMX XHR (fără swap; randerizăm manual) + fallback clasic spre /api/scan -->
+  <!-- Formular: HTMX XHR (fără swap; randerizăm manual) + fallback clasic spre /api/scan -->
   <form id="scan-form"
         action="/api/scan"
         method="get"
         hx-get="/api/scan"
-        hx-target="#results"
-        hx-trigger="submit"
         hx-swap="none"
-        hx-indicator="#loading">
+        hx-trigger="submit">
 
     <div class="row">
+      <!-- Select „Sursă” -->
       <div style="min-width:260px; flex:1 1 260px">
         <label class="muted">Sursă</label>
         <select id="path-select">
@@ -101,6 +106,7 @@
         </select>
       </div>
 
+      <!-- Câmpul „Path de bază” care se trimite la API -->
       <div style="min-width:260px; flex:2 1 400px">
         <label class="muted">Path de bază</label>
         <input id="path-input" type="text" name="path" value="{{ base_path }}" />
@@ -138,33 +144,31 @@
     </div>
   </form>
 
+  <!-- Bara de acțiuni SUS și JOS -->
   <div id="top-bar" class="bar" style="display:none"></div>
   <div id="results" style="margin-top:6px"></div>
   <div id="bottom-bar" class="bar bottom" style="display:none"></div>
 
   <script>
-    // --- Tema ---
+    // ---------- Tema (dark/light) ----------
     (function initTheme(){
       const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const saved = localStorage.getItem('dircleaner.theme');
+      const saved = localStorage.getItem('dircleaner.theme'); // 'dark' | 'light' | null
       const useDark = saved ? (saved === 'dark') : prefersDark;
       document.body.classList.toggle('dark', useDark);
-      const btn = document.getElementById('themeBtn');
-      if (btn) btn.textContent = useDark ? '☀️' : '🌙';
-      const lab = document.getElementById('themeLabel');
-      if (lab) lab.textContent = useDark ? 'dark' : 'light';
+      const btn = document.getElementById('themeBtn'); if (btn) btn.textContent = useDark ? '☀️' : '🌙';
+      const lab = document.getElementById('themeLabel'); if (lab) lab.textContent = useDark ? 'dark' : 'light';
     })();
     const themeBtn = document.getElementById('themeBtn');
     if (themeBtn) themeBtn.onclick = () => {
       const nowDark = !document.body.classList.contains('dark');
       document.body.classList.toggle('dark', nowDark);
       localStorage.setItem('dircleaner.theme', nowDark ? 'dark' : 'light');
-      themeBtn.textContent = nowDark ? '☀️' : '🌙';
-      const lab = document.getElementById('themeLabel');
-      if (lab) lab.textContent = nowDark ? 'dark' : 'light';
+      const btn = document.getElementById('themeBtn'); if (btn) btn.textContent = nowDark ? '☀️' : '🌙';
+      const lab = document.getElementById('themeLabel'); if (lab) lab.textContent = nowDark ? 'dark' : 'light';
     };
 
-    // --- Select Sursă ---
+    // ---------- Select Sursă → actualizează path + scan automat ----------
     const pathSel = document.getElementById('path-select');
     const pathInput = document.getElementById('path-input');
     function triggerScan() {
@@ -179,9 +183,9 @@
       });
     }
 
-    // --- State & sort & render (aceleași din varianta anterioară) ---
+    // ---------- State & sort & render ----------
     let currentItems = [];
-    let sortState = { key: 'size_bytes', dir: 'desc' };
+    let sortState = { key: 'size_bytes', dir: 'desc' }; // implicit: mărime desc
     let selectedPaths = new Set();
 
     document.body.addEventListener('htmx:beforeRequest', () => {
@@ -209,8 +213,6 @@
       return `
         <div class="actions">
           <span class="badge">Selectate: ${count}</span>
-          <button type="button" class="btn ghost" onclick="selectAll(true)">Bifează tot</button>
-          <button type="button" class="btn ghost" onclick="selectAll(false)">Debifează tot</button>
           <div class="spacer"></div>
           <button type="button" class="btn warn"   onclick="submitDelete('quarantine')">Mută în carantină</button>
           <button type="button" class="btn danger" onclick="submitDelete('delete')">Șterge definitiv</button>
@@ -258,14 +260,6 @@
         };
       });
     }
-    window.selectAll = function(on) {
-      document.querySelectorAll('.row-check').forEach(cb => {
-        cb.checked = on;
-        const p = cb.getAttribute('data-path');
-        if (on) selectedPaths.add(p); else selectedPaths.delete(p);
-      });
-      updateActionBars();
-    };
 
     function drawTable() {
       const items = [...currentItems];
@@ -287,7 +281,7 @@
 
       html += '<table><thead><tr>';
       html += headerCell('select', '');
-      html += headerCell('rel_path', 'Path');
+      html += headerCell('rel_path', 'Path', true);
       html += headerCell('size_bytes', 'Mărime', true);
       html += headerCell('file_count', 'Fișiere', true);
       html += headerCell('dir_count', 'Subfoldere', true);
@@ -318,14 +312,23 @@
       updateActionBars();
     }
 
+    // ✅ Trimitem țintele din selectedPaths (nu ne bazăm pe checkbox-uri la submit)
     window.submitDelete = function(actionType) {
-      const form = document.getElementById('delete-form');
-      const actionInput = document.getElementById('action');
-      actionInput.value = actionType;
-
+      const basePath = (document.querySelector('input[name=path]') || {}).value || '';
+      if (selectedPaths.size === 0) {
+        alert('Selectează cel puțin un director.');
+        return;
+      }
       if (actionType === 'delete' && !confirm('Ești sigur? Ștergerea este definitivă!')) return;
 
-      fetch('/api/delete', { method: 'POST', body: new FormData(form) })
+      const fd = new FormData();
+      fd.append('base_path', basePath);
+      fd.append('action', actionType);
+      for (const rel of selectedPaths) {
+        fd.append('targets', rel);
+      }
+
+      fetch('/api/delete', { method: 'POST', body: fd })
         .then(r => r.json())
         .then(data => {
           const moved = (data.moved || []).length;
@@ -340,4 +343,3 @@
   </script>
 </body>
 </html>
-``
