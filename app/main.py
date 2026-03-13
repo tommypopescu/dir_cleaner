@@ -2,13 +2,13 @@ import os
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import FastAPI, Request, Depends, Form
+from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .scanner import scan_directories, delete_or_quarantine
-from .security import basic_auth
+# from .security import basic_auth   # <- eliminat
 
 app = FastAPI(title="Dir Cleaner", version="1.0.0")
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
@@ -23,12 +23,12 @@ DEFAULT_UNUSED_DAYS = int(os.getenv("UNUSED_DAYS", "90"))
 DEFAULT_DEPTH = int(os.getenv("SCAN_DEPTH", "1"))
 AUDIT_LOG = Path(os.getenv("AUDIT_LOG", "/var/log/dir-cleaner/audit.log"))
 
-# ✅ Nou: listă de surse (separate prin virgulă) — ex. /data/movie/,/data/series/
+# Listă de surse selectabile în UI (virgulă-separate), ex.: /data/movie/,/data/series/
 PATH_CHOICES = [s.strip() for s in os.getenv("PATH_CHOICES", str(BASE_PATH)).split(",") if s.strip()]
 
 # ---------- UI ----------
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request, auth=Depends(basic_auth)):
+def index(request: Request):  # <- fără auth
     return templates.TemplateResponse("index.html", {
         "request": request,
         "base_path": str(BASE_PATH),
@@ -38,7 +38,7 @@ def index(request: Request, auth=Depends(basic_auth)):
             "depth": DEFAULT_DEPTH,
             "excludes": ",".join(EXCLUDES)
         },
-        "path_choices": PATH_CHOICES,     # ✅ trimitem lista de surse în UI
+        "path_choices": PATH_CHOICES,
     })
 
 # ---------- API ----------
@@ -50,7 +50,6 @@ def api_scan(
     unused_days: Optional[int] = None,
     depth: Optional[int] = None,
     excludes: Optional[str] = None,
-    auth=Depends(basic_auth)
 ):
     base = Path(path) if path else BASE_PATH
     if not base.exists() or not base.is_dir():
@@ -77,7 +76,6 @@ async def api_delete(
     base_path: str = Form(None),
     action: str = Form(...),           # "quarantine" sau "delete"
     targets: List[str] = Form(...),    # listă de căi relative față de base_path
-    auth=Depends(basic_auth)
 ):
     base = Path(base_path) if base_path else BASE_PATH
     quarantine = QUARANTINE_PATH if action == "quarantine" else None

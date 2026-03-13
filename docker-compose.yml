@@ -1,22 +1,22 @@
 services:
-  dir-cleaner:
+  dir_cleaner:
     image: ghcr.io/tommypopescu/dir-cleaner:latest   # <-- imagine din GHCR
     pull_policy: always                               # (opțional, Compose v2)
+    user: "10001:100"
     ports:
       - "8095:8080"
     environment:
       BASE_PATH: /data
+      PATH_CHOICES: "/data/movie/,/data/series/"  # <<— Aici setezi listele
       QUARANTINE_PATH: /quarantine
       SIZE_THRESHOLD_MB: "50"
       UNUSED_DAYS: "90"
       SCAN_DEPTH: "1"
       EXCLUDES: ".git,node_modules,.cache"
-      BASIC_AUTH_USER: "admin"
-      BASIC_AUTH_PASS: "changeMe!"
       AUDIT_LOG: "/var/log/dir-cleaner/audit.log"
     volumes:
-      - ./sample_data:/data:rw
-      - ./quarantine:/quarantine:rw
+      - /srv/mergerfs/3TB_merger/downloads/downloads/:/data:rw
+      - /srv/mergerfs/3TB_merger/downloads/downloads/delete:/quarantine:rw
       - dir_cleaner_logs:/var/log/dir-cleaner:rw
     restart: unless-stopped
 
