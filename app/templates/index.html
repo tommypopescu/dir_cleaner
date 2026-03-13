@@ -5,7 +5,6 @@
   <title>Dir Cleaner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
-  <!-- HTMX real (CDN) -->
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 
   <style>
@@ -43,8 +42,7 @@
       background: var(--bg); color: var(--text);
     }
 
-    .btn { padding: 6px 12px; border: 1px solid #ccc; border-radius: 6px; cursor: pointer; background:#fff; }
-    body.dark .btn { background:#0f172a; border-color:#334155; color:#e5e7eb; }
+    .btn { padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; cursor: pointer; background: var(--bg); color: var(--text); }
     .btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
     .btn.warn    { background: var(--warn); color:#fff; border-color: var(--warn); }
     .btn.danger  { background: var(--danger); color:#fff; border-color: var(--danger); }
@@ -75,12 +73,11 @@
 <body>
   <div class="topbar">
     <h1>Dir Cleaner</h1>
-    <!-- Toggle dark/light -->
     <button id="themeBtn" class="btn ghost theme-toggle" title="Comută tema">🌙</button>
   </div>
   <p class="muted">Scanează directoarele, sortează după mărime, marchează cele mici/vechi/goale și mută sau șterge în siguranță.</p>
 
-  <!-- FORMULAR: HTMX XHR, fără swap (randerizăm manual); fallback clasic spre /api/scan -->
+  <!-- FORMULAR: HTMX XHR (fără swap; randerizăm manual) + fallback clasic spre /api/scan -->
   <form id="scan-form"
         action="/api/scan"
         method="get"
@@ -90,9 +87,7 @@
         hx-swap="none"
         hx-indicator="#loading">
 
-    <!-- Linie cu selectorul de „Sursă” și buton Scan -->
     <div class="row">
-      <!-- Select sursă: se populează din PATH_CHOICES -->
       <div style="min-width:260px; flex:1 1 260px">
         <label class="muted">Sursă</label>
         <select id="path-select">
@@ -106,7 +101,6 @@
         </select>
       </div>
 
-      <!-- Câmpul real „path” trimis către API -->
       <div style="min-width:260px; flex:2 1 400px">
         <label class="muted">Path de bază</label>
         <input id="path-input" type="text" name="path" value="{{ base_path }}" />
@@ -120,7 +114,6 @@
       <span id="loading" class="muted" style="display:none">Se încarcă...</span>
     </div>
 
-    <!-- Filtre avansate -->
     <div class="grid" style="margin-top:10px">
       <div>
         <label>Prag mărime (MB &lt;)</label>
@@ -145,47 +138,50 @@
     </div>
   </form>
 
-  <!-- Bara de acțiuni SUS -->
   <div id="top-bar" class="bar" style="display:none"></div>
-
-  <!-- Rezultate tabel -->
   <div id="results" style="margin-top:6px"></div>
-
-  <!-- Bara de acțiuni JOS -->
   <div id="bottom-bar" class="bar bottom" style="display:none"></div>
 
   <script>
-    // ---------- TEMA (dark/light) ----------
+    // --- Tema ---
     (function initTheme(){
       const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const saved = localStorage.getItem('dircleaner.theme'); // 'dark' | 'light' | null
+      const saved = localStorage.getItem('dircleaner.theme');
       const useDark = saved ? (saved === 'dark') : prefersDark;
       document.body.classList.toggle('dark', useDark);
-      document.getElementById('themeBtn').textContent = useDark ? '☀️' : '🌙';
-      document.getElementById('themeLabel').textContent = useDark ? 'dark' : 'light';
+      const btn = document.getElementById('themeBtn');
+      if (btn) btn.textContent = useDark ? '☀️' : '🌙';
+      const lab = document.getElementById('themeLabel');
+      if (lab) lab.textContent = useDark ? 'dark' : 'light';
     })();
-
-    document.getElementById('themeBtn').onclick = () => {
+    const themeBtn = document.getElementById('themeBtn');
+    if (themeBtn) themeBtn.onclick = () => {
       const nowDark = !document.body.classList.contains('dark');
       document.body.classList.toggle('dark', nowDark);
       localStorage.setItem('dircleaner.theme', nowDark ? 'dark' : 'light');
-      document.getElementById('themeBtn').textContent = nowDark ? '☀️' : '🌙';
-      document.getElementById('themeLabel').textContent = nowDark ? 'dark' : 'light';
+      themeBtn.textContent = nowDark ? '☀️' : '🌙';
+      const lab = document.getElementById('themeLabel');
+      if (lab) lab.textContent = nowDark ? 'dark' : 'light';
     };
 
-    // ---------- SELECT SURSĂ ----------
+    // --- Select Sursă ---
     const pathSel = document.getElementById('path-select');
     const pathInput = document.getElementById('path-input');
+    function triggerScan() {
+      const f = document.getElementById('scan-form');
+      if (!f) return;
+      htmx.trigger(f, 'submit');
+    }
+    if (pathSel && pathInput) {
+      pathSel.addEventListener('change', () => {
+        pathInput.value = pathSel.value;
+        triggerScan();
+      });
+    }
 
-    // Când schimb „Sursa”, copiez în input și pornesc scan automat
-    pathSel.addEventListener('change', () => {
-      pathInput.value = pathSel.value;
-      triggerScan(); // scan automat
-    });
-
-    // ---------- STATE & UI ----------
+    // --- State & sort & render (aceleași din varianta anterioară) ---
     let currentItems = [];
-    let sortState = { key: 'size_bytes', dir: 'desc' }; // implicit: mărime desc
+    let sortState = { key: 'size_bytes', dir: 'desc' };
     let selectedPaths = new Set();
 
     document.body.addEventListener('htmx:beforeRequest', () => {
@@ -221,7 +217,6 @@
         </div>
       `;
     }
-
     function updateActionBars() {
       const top = document.getElementById('top-bar');
       const bot = document.getElementById('bottom-bar');
@@ -233,6 +228,44 @@
         bot.innerHTML = actionBarHtml();
       }
     }
+
+    function headerCell(key, label, sortable=false) {
+      if (!sortable) return `<th>${label}</th>`;
+      const active = (sortState.key === key);
+      const arrow = active ? (sortState.dir === 'asc' ? '▲' : '▼') : '↕';
+      return `<th class="sortable" data-key="${key}">${label}<span class="arrow">${arrow}</span></th>`;
+    }
+    function wireSortableHeaders() {
+      document.querySelectorAll('th.sortable').forEach(th => {
+        th.onclick = () => {
+          const key = th.getAttribute('data-key');
+          if (sortState.key === key) {
+            sortState.dir = (sortState.dir === 'asc') ? 'desc' : 'asc';
+          } else {
+            sortState.key = key;
+            sortState.dir = (key === 'rel_path') ? 'asc' : 'desc';
+          }
+          drawTable();
+        };
+      });
+    }
+    function wireRowCheckboxes() {
+      document.querySelectorAll('.row-check').forEach(cb => {
+        cb.onchange = () => {
+          const p = cb.getAttribute('data-path');
+          if (cb.checked) selectedPaths.add(p); else selectedPaths.delete(p);
+          updateActionBars();
+        };
+      });
+    }
+    window.selectAll = function(on) {
+      document.querySelectorAll('.row-check').forEach(cb => {
+        cb.checked = on;
+        const p = cb.getAttribute('data-path');
+        if (on) selectedPaths.add(p); else selectedPaths.delete(p);
+      });
+      updateActionBars();
+    };
 
     function drawTable() {
       const items = [...currentItems];
@@ -285,45 +318,6 @@
       updateActionBars();
     }
 
-    function headerCell(key, label, sortable=false) {
-      if (!sortable) return `<th>${label}</th>`;
-      const active = (sortState.key === key);
-      const arrow = active ? (sortState.dir === 'asc' ? '▲' : '▼') : '↕';
-      return `<th class="sortable" data-key="${key}">${label}<span class="arrow">${arrow}</span></th>`;
-    }
-    function wireSortableHeaders() {
-      document.querySelectorAll('th.sortable').forEach(th => {
-        th.onclick = () => {
-          const key = th.getAttribute('data-key');
-          if (sortState.key === key) {
-            sortState.dir = (sortState.dir === 'asc') ? 'desc' : 'asc';
-          } else {
-            sortState.key = key;
-            sortState.dir = (key === 'rel_path') ? 'asc' : 'desc';
-          }
-          drawTable();
-        };
-      });
-    }
-
-    function wireRowCheckboxes() {
-      document.querySelectorAll('.row-check').forEach(cb => {
-        cb.onchange = () => {
-          const p = cb.getAttribute('data-path');
-          if (cb.checked) selectedPaths.add(p); else selectedPaths.delete(p);
-          updateActionBars();
-        };
-      });
-    }
-    window.selectAll = function(on) {
-      document.querySelectorAll('.row-check').forEach(cb => {
-        cb.checked = on;
-        const p = cb.getAttribute('data-path');
-        if (on) selectedPaths.add(p); else selectedPaths.delete(p);
-      });
-      updateActionBars();
-    };
-
     window.submitDelete = function(actionType) {
       const form = document.getElementById('delete-form');
       const actionInput = document.getElementById('action');
@@ -343,15 +337,7 @@
         })
         .catch(e => alert('Eroare: ' + e));
     };
-
-    function triggerScan() {
-      const f = document.getElementById('scan-form');
-      if (!f) return;
-      htmx.trigger(f, 'submit');
-    }
-
-    // Scan inițial (opțional): decomentează dacă vrei auto-scan la deschiderea paginii
-    // window.addEventListener('load', triggerScan);
   </script>
 </body>
 </html>
+``

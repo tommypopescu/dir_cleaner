@@ -34,7 +34,8 @@ def index(request: Request, auth=Depends(basic_auth)):
             "unused_days": DEFAULT_UNUSED_DAYS,
             "depth": DEFAULT_DEPTH,
             "excludes": ",".join(EXCLUDES)
-        }
+        },
+        "path_choices": PATH_CHOICES  # ➕ NOU
     })
 
 @app.get("/api/scan")
